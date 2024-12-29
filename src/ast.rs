@@ -102,6 +102,25 @@ impl Regex {
         }
         current.nullable()
     }
+
+    // Highly suboptimal implementation of the repeat operator
+    fn repeat(r: Regex, low: usize, high: Option<usize>) -> Regex {
+        let mut result = Regex::Epsilon;
+        for _ in 0..low {
+            result = Regex::Concat(Box::new(result), Box::new(r.clone()));
+        }
+        if let Some(high) = high {
+            for _ in low..high {
+                result = Regex::Concat(
+                    Box::new(result),
+                    Box::new(Regex::Or(Box::new(r.clone()), Box::new(Regex::Epsilon))),
+                );
+            }
+        } else {
+            result = Regex::Concat(Box::new(result), Box::new(Regex::Star(Box::new(r.clone()))));
+        }
+        result
+    }
 }
 
 #[cfg(test)]
@@ -120,6 +139,23 @@ mod test {
         assert_eq!(regex.matches("abb"), true);
         assert_eq!(regex.matches("aba"), false);
         assert_eq!(regex.matches("b"), false);
+    }
+
+    #[test]
+    fn test_repeat() {
+        let regex = Regex::repeat(Regex::Literal('a'), 2, Some(4));
+        assert_eq!(regex.matches("a"), false);
+        assert_eq!(regex.matches("aa"), true);
+        assert_eq!(regex.matches("aaa"), true);
+        assert_eq!(regex.matches("aaaa"), true);
+        assert_eq!(regex.matches("aaaaa"), false);
+
+        let regex = Regex::repeat(Regex::Literal('a'), 2, None);
+        assert_eq!(regex.matches("a"), false);
+        assert_eq!(regex.matches("aa"), true);
+        assert_eq!(regex.matches("aaa"), true);
+        assert_eq!(regex.matches("aaaa"), true);
+        assert_eq!(regex.matches("aaaaa"), true);
     }
 
     #[test]
