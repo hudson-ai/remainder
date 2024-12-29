@@ -91,7 +91,7 @@ impl Regex {
         }
     }
 
-    fn matches(&self, s: &str) -> bool {
+    pub fn matches(&self, s: &str) -> bool {
         let mut current = self.clone();
         for c in s.chars() {
             // Short-circuit if the current regex matches nothing
@@ -104,7 +104,7 @@ impl Regex {
     }
 
     // Highly suboptimal implementation of the repeat operator
-    fn repeat(r: Regex, low: usize, high: Option<usize>) -> Regex {
+    pub fn repeat(r: Regex, low: usize, high: Option<usize>) -> Regex {
         let mut result = Regex::Epsilon;
         for _ in 0..low {
             result = Regex::Concat(Box::new(result), Box::new(r.clone()));
