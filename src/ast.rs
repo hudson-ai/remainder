@@ -10,8 +10,8 @@ pub enum Regex {
     Not(Box<Regex>),                // Negation
     Star(Box<Regex>),               // Kleene star
     Remainder {
-        // Remainder mod base is remainder
-        base: u32,
+        // Value mod divisor is remainder
+        divisor: u32,
         remainder: u32,
     },
 }
@@ -27,7 +27,7 @@ impl Regex {
             Regex::And(r, s) => r.nullable() && s.nullable(),
             Regex::Not(r) => !r.nullable(),
             Regex::Star(_) => true,
-            Regex::Remainder { remainder: rem, .. } => *rem == 0,
+            Regex::Remainder { remainder, .. } => *remainder == 0,
         }
     }
 
@@ -61,11 +61,11 @@ impl Regex {
             Regex::Star(r) => {
                 Regex::Concat(Box::new(r.derivative(c)), Box::new(Regex::Star(r.clone())))
             }
-            Regex::Remainder { base, remainder } => match c.to_digit(10) {
+            Regex::Remainder { divisor, remainder } => match c.to_digit(10) {
                 Some(digit) => {
-                    let remainder = (remainder * 10 + digit as u32) % base;
+                    let remainder = (remainder * 10 + digit as u32) % divisor;
                     Regex::Remainder {
-                        base: *base,
+                        divisor: *divisor,
                         remainder,
                     }
                 }
@@ -129,6 +129,10 @@ impl Regex {
         }
         result
     }
+
+    pub fn remainder(divisor: u32, remainder: u32) -> Regex {
+        Regex::Remainder { divisor, remainder }
+    }
 }
 
 #[cfg(test)]
@@ -168,11 +172,21 @@ mod test {
 
     #[test]
     fn test_remainder() {
-        for base in 1..=27 {
-            let regex = Regex::Remainder { base, remainder: 0 };
-            for i in 0..1000 {
-                let s = i.to_string();
-                assert_eq!(regex.matches(&s), i % base == 0);
+        for divisor in 1..=27 {
+            for remainder in 0..divisor {
+                let regex = Regex::remainder(divisor, remainder);
+                for i in 0..1000 {
+                    let s = i.to_string();
+                    assert_eq!(
+                        regex.matches(&s),
+                        i % divisor == remainder,
+                        "{:?} ({} % {} == {})",
+                        regex,
+                        s,
+                        divisor,
+                        remainder
+                    );
+                }
             }
         }
     }
