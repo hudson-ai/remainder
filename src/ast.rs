@@ -9,6 +9,11 @@ pub enum Regex {
     And(Box<Regex>, Box<Regex>),    // Intersection
     Not(Box<Regex>),                // Negation
     Star(Box<Regex>),               // Kleene star
+    Remainder {
+        // Remainder mod base is remainder
+        base: usize,
+        remainder: usize,
+    },
 }
 
 impl Regex {
@@ -22,6 +27,7 @@ impl Regex {
             Regex::And(r, s) => r.nullable() && s.nullable(),
             Regex::Not(r) => !r.nullable(),
             Regex::Star(_) => true,
+            Regex::Remainder { remainder: rem, .. } => *rem == 0,
         }
     }
 
@@ -55,6 +61,16 @@ impl Regex {
             Regex::Star(r) => {
                 Regex::Concat(Box::new(r.derivative(c)), Box::new(Regex::Star(r.clone())))
             }
+            Regex::Remainder { base, remainder } => match c.to_digit(10) {
+                Some(digit) => {
+                    let remainder = (remainder * 10 + digit as usize) % base;
+                    Regex::Remainder {
+                        base: *base,
+                        remainder,
+                    }
+                }
+                None => Regex::Empty,
+            },
         }
     }
 
@@ -71,6 +87,7 @@ impl Regex {
             Regex::And(r, s) => r.empty() || s.empty(),
             Regex::Not(r) => !r.empty(),
             Regex::Star(_) => false,
+            Regex::Remainder { .. } => false,
         }
     }
 
@@ -103,5 +120,16 @@ mod test {
         assert_eq!(regex.matches("abb"), true);
         assert_eq!(regex.matches("aba"), false);
         assert_eq!(regex.matches("b"), false);
+    }
+
+    #[test]
+    fn test_remainder() {
+        for base in 1..=27 {
+            let regex = Regex::Remainder { base, remainder: 0 };
+            for i in 0..1000 {
+                let s = i.to_string();
+                assert_eq!(regex.matches(&s), i % base == 0);
+            }
+        }
     }
 }
