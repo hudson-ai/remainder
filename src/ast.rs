@@ -10,9 +10,10 @@ pub enum Regex {
     Not(Box<Regex>),                // Negation
     Star(Box<Regex>),               // Kleene star
     Remainder {
-        // Value mod divisor is remainder
+        // Value mod divisor is target_remainder
         divisor: u32,
-        remainder: u32,
+        current_remainder: u32,
+        target_remainder: u32,
     },
 }
 
@@ -27,7 +28,11 @@ impl Regex {
             Regex::And(r, s) => r.nullable() && s.nullable(),
             Regex::Not(r) => !r.nullable(),
             Regex::Star(_) => true,
-            Regex::Remainder { remainder, .. } => *remainder == 0,
+            Regex::Remainder {
+                current_remainder,
+                target_remainder,
+                ..
+            } => current_remainder == target_remainder,
         }
     }
 
@@ -61,12 +66,17 @@ impl Regex {
             Regex::Star(r) => {
                 Regex::Concat(Box::new(r.derivative(c)), Box::new(Regex::Star(r.clone())))
             }
-            Regex::Remainder { divisor, remainder } => match c.to_digit(10) {
+            Regex::Remainder {
+                divisor,
+                current_remainder,
+                target_remainder,
+            } => match c.to_digit(10) {
                 Some(digit) => {
-                    let remainder = (remainder * 10 + digit as u32) % divisor;
+                    let current_remainder = (current_remainder * 10 + digit as u32) % divisor;
                     Regex::Remainder {
                         divisor: *divisor,
-                        remainder,
+                        current_remainder,
+                        target_remainder: *target_remainder,
                     }
                 }
                 None => Regex::Empty,
@@ -131,7 +141,11 @@ impl Regex {
     }
 
     pub fn remainder(divisor: u32, remainder: u32) -> Regex {
-        Regex::Remainder { divisor, remainder }
+        Regex::Remainder {
+            divisor,
+            current_remainder: 0,
+            target_remainder: remainder,
+        }
     }
 }
 
