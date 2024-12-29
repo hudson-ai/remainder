@@ -121,6 +121,14 @@ impl Regex {
         }
         result
     }
+
+    pub fn literal(s: &str) -> Regex {
+        let mut result = Regex::Epsilon;
+        for c in s.chars() {
+            result = Regex::Concat(Box::new(result), Box::new(Regex::Literal(c)));
+        }
+        result
+    }
 }
 
 #[cfg(test)]
