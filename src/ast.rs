@@ -11,8 +11,8 @@ pub enum Regex {
     Star(Box<Regex>),               // Kleene star
     Remainder {
         // Remainder mod base is remainder
-        base: usize,
-        remainder: usize,
+        base: u32,
+        remainder: u32,
     },
 }
 
@@ -63,7 +63,7 @@ impl Regex {
             }
             Regex::Remainder { base, remainder } => match c.to_digit(10) {
                 Some(digit) => {
-                    let remainder = (remainder * 10 + digit as usize) % base;
+                    let remainder = (remainder * 10 + digit as u32) % base;
                     Regex::Remainder {
                         base: *base,
                         remainder,
