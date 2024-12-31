@@ -87,6 +87,12 @@ impl Regex {
                 fractional_mode,
             } => {
                 if !fractional_mode && c == &'.' {
+                    let remainder_to_go =
+                        (*target_remainder + divisor - *current_remainder) % divisor;
+                    let achievable = check_remainder(*divisor, remainder_to_go, *scale);
+                    if !achievable {
+                        return Regex::Empty;
+                    }
                     Regex::Remainder {
                         divisor: *divisor,
                         current_remainder: *current_remainder,
@@ -98,12 +104,20 @@ impl Regex {
                     if *fractional_mode && *scale == 0 {
                         return Regex::Empty;
                     }
-                    let current_remainder = if !fractional_mode {
-                        (current_remainder * 10 + digit * 10_u32.pow(*scale)) % divisor
-                    } else {
-                        (current_remainder + digit * 10_u32.pow(*scale - 1)) % divisor
-                    };
                     let scale = if *fractional_mode { *scale - 1 } else { *scale };
+                    let current_remainder = if !fractional_mode {
+                        (current_remainder * 10 + digit * 10_u32.pow(scale)) % divisor
+                    } else {
+                        let next_remainder =
+                            (current_remainder + digit * 10_u32.pow(scale)) % divisor;
+                        let remainder_to_go =
+                            (*target_remainder + divisor - next_remainder) % divisor;
+                        let achievable = check_remainder(*divisor, remainder_to_go, scale);
+                        if !achievable {
+                            return Regex::Empty;
+                        }
+                        next_remainder
+                    };
                     Regex::Remainder {
                         divisor: *divisor,
                         current_remainder,
@@ -190,6 +204,46 @@ fn scale_divisor(divisor: f32) -> Result<(u32, u32), String> {
 
         Ok((scaled_divisor.abs() as u32, scale as u32))
     }
+}
+
+/// Checks if there exists a sequence of n numbers A_0, ..., A_{n-1} such that
+/// A_0 * 10^0 + ... + A_{n-1} * 10^{-1} = remainder (mod divisor)
+fn check_remainder(divisor: u32, remainder: u32, n: u32) -> bool {
+    if n == 0 {
+        return remainder == 0;
+    };
+    // Short circuit if we can't possibly reach remainder
+    if 10_u32.pow(n + 1) <= remainder {
+        return false;
+    }
+
+    // 1d DP table
+    // current[rem] = true if `rem` is achievable
+    let mut current = vec![false; divisor as usize];
+    let mut next = vec![false; divisor as usize];
+    current[0] = true; // 0 is always achievable
+
+    for _ in 0..n {
+        // Clear the 'next' array for the current iteration
+        for entry in next.iter_mut() {
+            *entry = false;
+        }
+        for rem in 0..divisor {
+            if current[rem as usize] {
+                for digit in 0..=9 {
+                    let new_rem = (rem * 10 + digit) % divisor;
+                    if new_rem == remainder {
+                        // Short circuit if we've found a solution
+                        return true;
+                    }
+                    next[new_rem as usize] = true;
+                }
+            }
+        }
+        // Swap 'current' and 'next' for the next iteration
+        std::mem::swap(&mut current, &mut next);
+    }
+    false
 }
 
 #[cfg(test)]
