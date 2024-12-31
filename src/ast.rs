@@ -207,12 +207,17 @@ fn scale_divisor(divisor: f32) -> Result<(u32, u32), String> {
 /// Checks if there exists a sequence of n numbers A_0, ..., A_{n-1} such that
 /// A_0 * 10^0 + ... + A_{n-1} * 10^{-1} = remainder (mod divisor)
 fn check_remainder(divisor: u32, remainder: u32, n: u32) -> bool {
+    // Short circuit if we are out of digits
     if n == 0 {
         return remainder == 0;
     };
     // Short circuit if we can't possibly reach remainder
     if 10_u32.pow(n) - 1 < remainder {
         return false;
+    }
+    // Short circuit if n is sufficiently large
+    if ((divisor as f32).log10().ceil() as u32) < n {
+        return true;
     }
 
     // 1d DP table
