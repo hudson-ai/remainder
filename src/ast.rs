@@ -16,6 +16,8 @@ pub enum Regex {
         divisor: u32,
         current_remainder: u32,
         target_remainder: u32,
+        scale: u32,
+        fractional_mode: bool,
     },
 }
 
@@ -81,51 +83,51 @@ impl Regex {
                 divisor,
                 current_remainder,
                 target_remainder,
-            } => match c.to_digit(10) {
-                Some(digit) => {
-                    let current_remainder = (current_remainder * 10 + digit as u32) % divisor;
+                scale,
+                fractional_mode,
+            } => {
+                if !fractional_mode && c == &'.' {
+                    Regex::Remainder {
+                        divisor: *divisor,
+                        current_remainder: *current_remainder,
+                        target_remainder: *target_remainder,
+                        scale: *scale,
+                        fractional_mode: true,
+                    }
+                } else if let Some(digit) = c.to_digit(10) {
+                    if *fractional_mode && *scale == 0 {
+                        return Regex::Empty;
+                    }
+                    let current_remainder = if !fractional_mode {
+                        (current_remainder * 10 + digit * 10_u32.pow(*scale)) % divisor
+                    } else {
+                        (current_remainder + digit * 10_u32.pow(*scale - 1)) % divisor
+                    };
+                    let scale = if *fractional_mode { *scale - 1 } else { *scale };
                     Regex::Remainder {
                         divisor: *divisor,
                         current_remainder,
                         target_remainder: *target_remainder,
+                        scale: scale,
+                        fractional_mode: *fractional_mode,
                     }
+                } else {
+                    Regex::Empty
                 }
-                None => Regex::Empty,
-            },
-        }
-    }
-
-    fn empty(&self) -> bool {
-        if self.nullable() {
-            return false;
-        }
-        match self {
-            Regex::Empty => true,
-            Regex::Epsilon => false,
-            Regex::Literal(_) => false,
-            Regex::Concat(rxs) => rxs.iter().any(|rx| rx.empty()),
-            Regex::Or(rxs) => rxs.iter().all(|rx| rx.empty()),
-            Regex::And(rxs) => rxs.iter().any(|rx| rx.empty()),
-            Regex::Not(r) => !r.empty(),
-            Regex::Star(_) => false,
-            Regex::Remainder { .. } => false,
+            }
         }
     }
 
     pub fn matches(&self, s: &str) -> bool {
         let mut current = self.clone();
         for c in s.chars() {
-            // Short-circuit if the current regex matches nothing
-            if current.empty() {
-                return false;
-            }
             current = current.derivative(&c);
         }
         current.nullable()
     }
 
     // Highly suboptimal implementation of the repeat operator
-    pub fn repeat(r: Regex, low: usize, high: Option<usize>) -> Regex {
+    pub fn repeat(r: Regex, low: u32, high: Option<u32>) -> Regex {
         let mut result = vec![];
         for _ in 0..low {
             result.push(r.clone());
@@ -148,6 +150,18 @@ impl Regex {
         Regex::Concat(result)
     }
 
+    pub fn fractional_remainder(divisor: f32, remainder: u32) -> Result<Regex, String> {
+        let (divisor, scale) = scale_divisor(divisor)?;
+
+        Ok(Regex::Remainder {
+            divisor,
+            current_remainder: 0,
+            target_remainder: remainder,
+            scale: scale,
+            fractional_mode: false,
+        })
+    }
+
     pub fn remainder(divisor: u32, remainder: u32) -> Regex {
         Regex::Remainder {
             divisor,
@@ -168,20 +182,13 @@ fn scale_divisor(divisor: f32) -> Result<(u32, u32), String> {
             .split('.')
             .nth(1)
             .ok_or("No decimal part found")?;
-        let scale_power = decimal_part.len();
-
-        if scale_power > 9 {
-            return Err("Too many decimal places, potential u32 overflow".to_string());
-        }
-
-        let scale = 10_u32.pow(scale_power as u32);
-        let scaled_divisor = (divisor * scale as f32).round();
-
+        let scale = decimal_part.len();
+        let scaled_divisor = divisor * 10_f32.powi(scale as i32);
         if scaled_divisor > u32::MAX as f32 {
             return Err("Scaled divisor exceeds u32::MAX".to_string());
         }
 
-        Ok((scaled_divisor.abs() as u32, scale))
+        Ok((scaled_divisor.abs() as u32, scale as u32))
     }
 }
 
@@ -237,6 +244,33 @@ mod test {
                         remainder
                     );
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn test_remainder_fractional() {
+        let step = 0.0125;
+        let (_, scale) = scale_divisor(step).unwrap();
+        let factor = 10_f32.powi(scale as i32);
+        for divisor in [2.5, 2.25, 2.125, 1.5, 1.25, 1.125, 0.5, 0.25, 0.125, 0.05].iter() {
+            let regex = Regex::fractional_remainder(*divisor, 0).unwrap();
+            for i in 0..100 {
+                // Round to avoid floating point errors
+                let i = ((i as f32 * step) * factor).round() / factor;
+                // Check if i is a multiple of divisor, with some tolerance smaller than our factor
+                let is_multiple = ((i / divisor) - (i / divisor).round()).abs() < 0.1 / factor;
+                let s = i.to_string();
+                assert_eq!(
+                    regex.matches(&s),
+                    is_multiple,
+                    "{:?} ({} % {} == 0.0) ({}) {}",
+                    regex,
+                    s,
+                    divisor,
+                    is_multiple,
+                    ((i / divisor) - (i / divisor).round()).abs()
+                );
             }
         }
     }
