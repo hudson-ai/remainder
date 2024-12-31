@@ -1,5 +1,3 @@
-use std::iter;
-
 // Enum to represent regex types
 #[derive(Debug, Clone)]
 pub enum Regex {
