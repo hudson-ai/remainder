@@ -211,7 +211,7 @@ fn check_remainder(divisor: u32, remainder: u32, n: u32) -> bool {
         return remainder == 0;
     };
     // Short circuit if we can't possibly reach remainder
-    if 10_u32.pow(n + 1) <= remainder {
+    if 10_u32.pow(n) - 1 < remainder {
         return false;
     }
 
